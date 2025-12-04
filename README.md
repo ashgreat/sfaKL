@@ -41,6 +41,7 @@ result <- sfaKL_estimate(
 )
 
 print(result)
+```
 
 ### Arguments
 
@@ -64,6 +65,7 @@ The dimensions are automatically inferred from the lengths of the `share_input` 
 
 Ensure that `price_input_ratio` has length $J-1$ and `price_output_ratios` has length $M$.
 
+```r
 # Compare estimated parameters with true parameters
 print("True Parameters:")
 print(unlist(true_params))
