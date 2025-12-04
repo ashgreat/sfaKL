@@ -65,11 +65,13 @@ get_matrices <- function(params) {
     Omega <- diag(c(sigma_v12^2, sigma_v21^2, sigma_v22^2))
 
     Theta <- Omega + H %*% Sigma %*% t(H)
+    Theta <- (Theta + t(Theta)) / 2
 
     Omega_inv <- solve(Omega)
     Sigma_inv <- solve(Sigma)
     Delta_inv <- t(H) %*% Omega_inv %*% H + Sigma_inv
     Delta <- solve(Delta_inv)
+    Delta <- (Delta + t(Delta)) / 2
 
     Psi <- Sigma %*% t(H) %*% solve(Theta)
 

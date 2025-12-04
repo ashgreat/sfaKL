@@ -26,16 +26,16 @@ sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", co
         coef_R2 <- coef(m_R2)
 
         start_params <- c(
-            alpha2 = coef_S2["(Intercept)"],
-            alpha22 = coef_S2["ln_w2_w1"],
-            beta1 = coef_R1["(Intercept)"],
-            beta2 = coef_R2["(Intercept)"],
-            beta11 = coef_R1["ln_p1_w1"],
-            beta22 = coef_R2["ln_p2_w1"],
-            beta12 = (coef_R1["ln_p2_w1"] + coef_R2["ln_p1_w1"]) / 2, # Average for symmetry
+            alpha2 = as.numeric(coef_S2["(Intercept)"]),
+            alpha22 = as.numeric(coef_S2["ln_w2_w1"]),
+            beta1 = as.numeric(coef_R1["(Intercept)"]),
+            beta2 = as.numeric(coef_R2["(Intercept)"]),
+            beta11 = as.numeric(coef_R1["ln_p1_w1"]),
+            beta22 = as.numeric(coef_R2["ln_p2_w1"]),
+            beta12 = as.numeric((coef_R1["ln_p2_w1"] + coef_R2["ln_p1_w1"]) / 2), # Average for symmetry
 
-            gamma21 = coef_S2["ln_p1_w1"],
-            gamma22 = coef_S2["ln_p2_w1"],
+            gamma21 = as.numeric(coef_S2["ln_p1_w1"]),
+            gamma22 = as.numeric(coef_S2["ln_p2_w1"]),
 
             # Log variances (start small/moderate)
             log_sigma_mu1 = log(0.1),

@@ -44,7 +44,7 @@ predict.sfaKL <- function(object, newdata = NULL, ...) {
 
     # Loop over observations
     for (i in 1:n) {
-        eps_i <- epsilon[i, ]
+        eps_i <- matrix(as.numeric(epsilon[i, ]), ncol = 1)
         mu_cond <- Psi %*% eps_i # 4x1 vector
 
         # Denominator: Phi(mu_cond; 0, Delta)
