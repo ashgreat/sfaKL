@@ -1,0 +1,21 @@
+Package: sfaKL
+Title: Multi-Output Multi-Input Stochastic Frontier Analysis
+Version: 0.1.0
+Authors@R: 
+    person("Ashwin", "Malshe", , role = c("aut", "cre"))
+Description: Implements the multi-output multi-input stochastic frontier system 
+    with input- and output-specific inefficiency as proposed by 
+    Kumbhakar and Lai (2021) <doi:10.1016/j.econlet.2021.109807>.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Imports: 
+    mvtnorm,
+    ggplot2,
+    stats
+Suggests: 
+    testthat,
+    knitr,
+    rmarkdown
