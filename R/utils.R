@@ -145,13 +145,15 @@ get_matrices <- function(params, J = 2, M = 2) {
     Theta <- Omega + H %*% Sigma %*% t(H)
     Theta <- (Theta + t(Theta)) / 2
 
-    Omega_inv <- solve(Omega)
-    Sigma_inv <- solve(Sigma)
+    # Add small regularization for numerical stability
+    ridge <- 1e-10
+    Omega_inv <- solve(Omega + ridge * diag(nrow(Omega)))
+    Sigma_inv <- solve(Sigma + ridge * diag(nrow(Sigma)))
     Delta_inv <- t(H) %*% Omega_inv %*% H + Sigma_inv
-    Delta <- solve(Delta_inv)
+    Delta <- solve(Delta_inv + ridge * diag(nrow(Delta_inv)))
     Delta <- (Delta + t(Delta)) / 2
 
-    Psi <- Sigma %*% t(H) %*% solve(Theta)
+    Psi <- Sigma %*% t(H) %*% solve(Theta + ridge * diag(nrow(Theta)))
 
     list(
         H = H,

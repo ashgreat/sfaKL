@@ -68,7 +68,10 @@ sfaKL_loglik <- function(params, data, J = 2, M = 2, n_cores = 1) {
             calc_term2 <- function(i) {
                 prob <- suppressWarnings(mvtnorm::pmvnorm(lower = rep(-Inf, n_ineff), upper = args[i, ], mean = rep(0, n_ineff), sigma = Delta))
                 val <- as.numeric(prob)
-                if (val <= 0 || is.na(val)) val <- 1e-100
+                # Use a more robust floor and track floored values
+                if (val <= 0 || is.na(val)) {
+                    val <- 1e-50
+                }
                 return(log(val))
             }
 

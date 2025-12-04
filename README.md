@@ -76,10 +76,21 @@ sfaKL_check(result)
 The `sfaKL` package now supports **arbitrary numbers of inputs ($J$) and outputs ($M$)**. 
 The dimensions are automatically inferred from the lengths of the `share_input` and `share_output` arguments.
 
--   $J = \text{length(share\\_input)} + 1$
--   $M = \text{length(share\\_output)}$
+-   $J = \text{length(share\_input)} + 1$
+-   $M = \text{length(share\_output)}$
 
 Ensure that `price_input_ratio` has length $J-1$ and `price_output_ratios` has length $M$.
+
+### Distributional Assumptions
+
+The model relies on the following distributional assumptions (Kumbhakar & Lai, 2021):
+
+1. **[A1]** The vector of input-specific inefficiency $\mu \sim N^-(0_J, \Sigma_\mu)$, i.e., $\mu \le 0$ is multivariate half-normal.
+2. **[A2]** The vector of output-specific inefficiency $\delta \sim N^+(0_M, \Sigma_\delta)$, i.e., $\delta \ge 0$ is multivariate half-normal.
+3. **[A3]** The symmetric random error vector $v \sim N(0_{J+M-1}, \Omega)$.
+4. **[A4]** The inefficiency components $\mu$ and $\delta$ are independent of each other and of the noise $v$.
+
+Under these assumptions, the composite error follows a **closed skew normal (CSN)** distribution, enabling closed-form likelihood evaluation.
 
 ```r
 # Compare estimated parameters with true parameters
