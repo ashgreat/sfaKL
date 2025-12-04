@@ -3,11 +3,13 @@
 #' @param object An object of class sfaKL
 #' @param newdata Optional new data frame
 #' @param ... Additional arguments
+#' @param n_cores Number of cores for parallel execution (default 1)
 #' @return A data frame with predicted inefficiencies
 #' @importFrom mvtnorm pmvnorm
 #' @importFrom stats dnorm
+#' @importFrom parallel mclapply
 #' @export
-predict.sfaKL <- function(object, newdata = NULL, ...) {
+predict.sfaKL <- function(object, newdata = NULL, n_cores = 1, ...) {
     if (is.null(newdata)) {
         data <- object$data
     } else {
@@ -43,7 +45,9 @@ predict.sfaKL <- function(object, newdata = NULL, ...) {
     eta_pred <- matrix(0, n, 4)
 
     # Loop over observations
-    for (i in 1:n) {
+    # Use parallel::mclapply if n_cores > 1
+
+    calc_ineff <- function(i) {
         eps_i <- matrix(as.numeric(epsilon[i, ]), ncol = 1)
         mu_cond <- Psi %*% eps_i # 4x1 vector
 
@@ -83,7 +87,17 @@ predict.sfaKL <- function(object, newdata = NULL, ...) {
         }
 
         # E[eta] = mu_cond + Delta %*% (num / denom)
-        eta_pred[i, ] <- mu_cond + Delta %*% (num / denom)
+        return(mu_cond + Delta %*% (num / denom))
+    }
+
+    if (n_cores > 1) {
+        eta_pred_list <- parallel::mclapply(1:n, calc_ineff, mc.cores = n_cores)
+        eta_pred <- do.call(rbind, lapply(eta_pred_list, t))
+    } else {
+        eta_pred <- matrix(0, n, 4)
+        for (i in 1:n) {
+            eta_pred[i, ] <- t(calc_ineff(i))
+        }
     }
 
     # eta = (-mu1, -mu2, delta1, delta2)

@@ -2,10 +2,12 @@
 #'
 #' @param params Named vector of parameters
 #' @param data Data frame containing the variables
+#' @param n_cores Number of cores for parallel execution
 #' @return Negative log-likelihood
 #' @importFrom mvtnorm pmvnorm
 #' @importFrom stats dnorm
-sfaKL_loglik <- function(params, data) {
+#' @importFrom parallel mclapply
+sfaKL_loglik <- function(params, data, n_cores = 1) {
     # Extract data
     # Dependent variables (residuals from the share equations)
 
@@ -91,15 +93,29 @@ sfaKL_loglik <- function(params, data) {
                 return(1e10)
             }
 
-            term2 <- numeric(nrow(data))
-            lower <- rep(-Inf, 4)
-            mean_delta <- rep(0, 4)
+            # Loop over observations (can be slow in R, but unavoidable with pmvnorm)
+            # Use parallel::mclapply if n_cores > 1
 
-            for (i in 1:nrow(data)) {
+            calc_term2 <- function(i) {
                 prob <- suppressWarnings(mvtnorm::pmvnorm(lower = lower, upper = args[i, ], mean = mean_delta, sigma = Delta))
                 val <- as.numeric(prob)
                 if (val <= 0 || is.na(val)) val <- 1e-100
-                term2[i] <- log(val)
+                return(log(val))
+            }
+
+            lower <- rep(-Inf, 4)
+            mean_delta <- rep(0, 4)
+
+            if (n_cores > 1) {
+                # Use mclapply for parallel execution (works best on macOS/Linux)
+                term2_list <- parallel::mclapply(1:nrow(data), calc_term2, mc.cores = n_cores)
+                term2 <- unlist(term2_list)
+            } else {
+                # Serial execution
+                term2 <- numeric(nrow(data))
+                for (i in 1:nrow(data)) {
+                    term2[i] <- calc_term2(i)
+                }
             }
 
             # Term 3: Denominator

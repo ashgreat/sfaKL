@@ -4,9 +4,10 @@
 #' @param start_params Optional named vector of starting parameters
 #' @param method Optimization method (default "Nelder-Mead")
 #' @param control List of control parameters for optim
+#' @param n_cores Number of cores for parallel execution (default 1)
 #' @return An object of class sfaKL
 #' @export
-sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", control = list(maxit = 5000)) {
+sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", control = list(maxit = 5000), n_cores = 1) {
     # Check if data has required columns
     required_cols <- c("S2", "R1", "R2", "ln_w2_w1", "ln_p1_w1", "ln_p2_w1")
     if (!all(required_cols %in% names(data))) {
@@ -55,7 +56,8 @@ sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", co
         data = data,
         method = method,
         control = control,
-        hessian = TRUE
+        hessian = TRUE,
+        n_cores = n_cores
     )
 
     if (opt$convergence != 0) {

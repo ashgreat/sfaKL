@@ -14,7 +14,8 @@ RoxygenNote: 7.2.3
 Imports: 
     mvtnorm,
     ggplot2,
-    stats
+    stats,
+    parallel
 Suggests: 
     testthat,
     knitr,
