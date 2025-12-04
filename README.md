@@ -44,23 +44,23 @@ print(result)
 
 ### Arguments
 
-*   `data`: A data frame containing the variables.
-*   `share_input`: Name of the input share column (default `"S2"`).
-*   `share_output`: Vector of names for the output share columns (default `c("R1", "R2")`).
-*   `price_input_ratio`: Name of the log input price ratio column $\ln(w_2/w_1)$ (default `"ln_w2_w1"`).
-*   `price_output_ratios`: Vector of names for the log output-to-input price ratio columns $\ln(p_m/w_1)$ (default `c("ln_p1_w1", "ln_p2_w1")`).
-*   `n_cores`: Number of cores to use for parallel execution (default `1`).
-*   `start_params`: Optional named vector of starting parameters. If `NULL`, OLS estimates are used.
-*   `method`: Optimization method passed to `optim` (default `"Nelder-Mead"`).
-*   `control`: List of control parameters passed to `optim`.
+-   `data`: A data frame containing the variables.
+-   `share_input`: Name of the input share column (default `"S2"`).
+-   `share_output`: Vector of names for the output share columns (default `c("R1", "R2")`).
+-   `price_input_ratio`: Name of the log input price ratio column $\ln(w_2/w_1)$ (default `"ln_w2_w1"`).
+-   `price_output_ratios`: Vector of names for the log output-to-input price ratio columns $\ln(p_m/w_1)$ (default `c("ln_p1_w1", "ln_p2_w1")`).
+-   `n_cores`: Number of cores to use for parallel execution (default `1`).
+-   `start_params`: Optional named vector of starting parameters. If `NULL`, OLS estimates are used.
+-   `method`: Optimization method passed to `optim` (default `"Nelder-Mead"`).
+-   `control`: List of control parameters passed to `optim`.
 
 ### Model Dimensions
 
 The `sfaKL` package now supports **arbitrary numbers of inputs ($J$) and outputs ($M$)**. 
 The dimensions are automatically inferred from the lengths of the `share_input` and `share_output` arguments.
 
-*   $J = \text{length(share\_input)} + 1$
-*   $M = \text{length(share\_output)}$
+-   $J = \text{length(share\_input)} + 1$
+-   $M = \text{length(share\_output)}$
 
 Ensure that `price_input_ratio` has length $J-1$ and `price_output_ratios` has length $M$.
 
