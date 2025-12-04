@@ -30,8 +30,15 @@ head(data)
 
 # 2. Estimate Model
 # The estimation uses the share equations derived from the translog profit function.
-# Note: Optimization can be sensitive to starting values.
-result <- sfaKL_estimate(data, method = "Nelder-Mead", control = list(maxit = 10000))
+# You can specify custom column names if your data doesn't match the defaults.
+result <- sfaKL_estimate(
+  data, 
+  share_input = "S2", 
+  share_output = c("R1", "R2"), 
+  price_input_ratio = "ln_w2_w1", 
+  price_output_ratios = c("ln_p1_w1", "ln_p2_w1"),
+  n_cores = 1
+)
 
 print(result)
 

@@ -7,20 +7,51 @@
 #' @param n_cores Number of cores for parallel execution (default 1)
 #' @return An object of class sfaKL
 #' @export
-sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", control = list(maxit = 5000), n_cores = 1) {
-    # Check if data has required columns
-    required_cols <- c("S2", "R1", "R2", "ln_w2_w1", "ln_p1_w1", "ln_p2_w1")
-    if (!all(required_cols %in% names(data))) {
-        stop("Data must contain columns: ", paste(required_cols, collapse = ", "))
+#' @param share_input Name of the input share column (default "S2")
+#' @param share_output Names of the output share columns (default c("R1", "R2"))
+#' @param price_input_ratio Name of the log input price ratio column (default "ln_w2_w1")
+#' @param price_output_ratios Names of the log output-to-input price ratio columns (default c("ln_p1_w1", "ln_p2_w1"))
+#' @param n_cores Number of cores for parallel execution (default 1)
+#' @return An object of class sfaKL
+#' @export
+sfaKL_estimate <- function(data,
+                           share_input = "S2",
+                           share_output = c("R1", "R2"),
+                           price_input_ratio = "ln_w2_w1",
+                           price_output_ratios = c("ln_p1_w1", "ln_p2_w1"),
+                           start_params = NULL,
+                           method = "Nelder-Mead",
+                           control = list(maxit = 5000),
+                           n_cores = 1) {
+    # Map user columns to internal names
+    cols_map <- c(
+        S2 = share_input,
+        R1 = share_output[1],
+        R2 = share_output[2],
+        ln_w2_w1 = price_input_ratio,
+        ln_p1_w1 = price_output_ratios[1],
+        ln_p2_w1 = price_output_ratios[2]
+    )
+
+    # Check if columns exist
+    if (!all(cols_map %in% names(data))) {
+        missing <- cols_map[!cols_map %in% names(data)]
+        stop("Missing columns in data: ", paste(missing, collapse = ", "))
+    }
+
+    # Create internal data frame with standard names
+    data_internal <- data
+    for (std_name in names(cols_map)) {
+        data_internal[[std_name]] <- data[[cols_map[[std_name]]]]
     }
 
     # Default starting parameters if not provided
     if (is.null(start_params)) {
         # Simple OLS to get rough starting values for alphas and betas
         # S2 ~ ln_w2_w1 + ln_p1_w1 + ln_p2_w1
-        m_S2 <- lm(-S2 ~ ln_w2_w1 + ln_p1_w1 + ln_p2_w1, data = data)
-        m_R1 <- lm(R1 ~ ln_p1_w1 + ln_p2_w1 + ln_w2_w1, data = data)
-        m_R2 <- lm(R2 ~ ln_p1_w1 + ln_p2_w1 + ln_w2_w1, data = data)
+        m_S2 <- lm(-S2 ~ ln_w2_w1 + ln_p1_w1 + ln_p2_w1, data = data_internal)
+        m_R1 <- lm(R1 ~ ln_p1_w1 + ln_p2_w1 + ln_w2_w1, data = data_internal)
+        m_R2 <- lm(R2 ~ ln_p1_w1 + ln_p2_w1 + ln_w2_w1, data = data_internal)
 
         coef_S2 <- coef(m_S2)
         coef_R1 <- coef(m_R1)
@@ -53,7 +84,7 @@ sfaKL_estimate <- function(data, start_params = NULL, method = "Nelder-Mead", co
     opt <- optim(
         par = start_params,
         fn = sfaKL_loglik,
-        data = data,
+        data = data_internal,
         method = method,
         control = control,
         hessian = TRUE,
