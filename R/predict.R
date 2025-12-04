@@ -72,8 +72,8 @@ predict.sfaKL <- function(object, newdata = NULL, n_cores = 1, ...) {
             idx <- (1:4)[-j]
 
             Sigma_11 <- Delta[idx, idx]
-            Sigma_12 <- Delta[idx, j]
-            Sigma_21 <- Delta[j, idx]
+            Sigma_12 <- matrix(Delta[idx, j], ncol = 1)
+            Sigma_21 <- matrix(Delta[j, idx], nrow = 1)
             Sigma_22 <- Delta[j, j]
 
             mu_c <- Sigma_12 %*% (1 / Sigma_22) * s_j
