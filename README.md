@@ -42,6 +42,22 @@ result <- sfaKL_estimate(
 
 print(result)
 
+### Arguments
+
+*   `data`: A data frame containing the variables.
+*   `share_input`: Name of the input share column (default `"S2"`).
+*   `share_output`: Vector of names for the output share columns (default `c("R1", "R2")`).
+*   `price_input_ratio`: Name of the log input price ratio column $\ln(w_2/w_1)$ (default `"ln_w2_w1"`).
+*   `price_output_ratios`: Vector of names for the log output-to-input price ratio columns $\ln(p_m/w_1)$ (default `c("ln_p1_w1", "ln_p2_w1")`).
+*   `n_cores`: Number of cores to use for parallel execution (default `1`).
+*   `start_params`: Optional named vector of starting parameters. If `NULL`, OLS estimates are used.
+*   `method`: Optimization method passed to `optim` (default `"Nelder-Mead"`).
+*   `control`: List of control parameters passed to `optim`.
+
+### Model Limitation
+
+**Note:** The current implementation of `sfaKL` is hardcoded for the **2-input, 2-output** case ($J=2, M=2$) as described in the application section of Kumbhakar and Lai (2021). It expects exactly one input share equation ($S_2$) and two revenue share equations ($R_1, R_2$). Future versions may generalize this to arbitrary dimensions.
+
 # Compare estimated parameters with true parameters
 print("True Parameters:")
 print(unlist(true_params))
