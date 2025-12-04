@@ -10,69 +10,66 @@
 #' @importFrom parallel mclapply
 #' @export
 predict.sfaKL <- function(object, newdata = NULL, n_cores = 1, ...) {
-    if (is.null(newdata)) {
-        data <- object$data
-    } else {
-        data <- newdata
-    }
-
     # Extract dimensions
     J <- object$J
     M <- object$M
-    if (is.null(J)) J <- 2 # Fallback
+    if (is.null(J)) J <- 2
     if (is.null(M)) M <- 2
+
+    required_std <- c(paste0("S", 2:J), paste0("R", 1:M), paste0("ln_w", 2:J, "_w1"), paste0("ln_p", 1:M, "_w1"))
+    data_internal <- NULL
+
+    if (is.null(newdata)) {
+        data_internal <- object$data
+    } else {
+        # Map newdata columns to internal names using stored mapping when available
+        if (!is.null(object$cols_map)) {
+            if (all(names(object$cols_map) %in% names(newdata))) {
+                data_internal <- newdata[, names(object$cols_map), drop = FALSE]
+            } else if (all(object$cols_map %in% names(newdata))) {
+                data_internal <- data.frame(matrix(NA, nrow = nrow(newdata), ncol = length(object$cols_map)))
+                colnames(data_internal) <- names(object$cols_map)
+                for (std_name in names(object$cols_map)) data_internal[[std_name]] <- newdata[[object$cols_map[[std_name]]]]
+            } else {
+                stop("newdata is missing required columns.")
+            }
+        } else {
+            if (!all(required_std %in% names(newdata))) stop("newdata must include: ", paste(required_std, collapse = ", "))
+            data_internal <- newdata[, required_std, drop = FALSE]
+        }
+    }
+
+    # Ensure columns ordered
+    data_internal <- data_internal[, required_std, drop = FALSE]
 
     n_input_shares <- J - 1
     n_output_shares <- M
     n_ineff <- J + M
 
     params <- object$raw_par
+    profit_params <- assemble_profit_parameters(params, J = J, M = M)
     mats <- get_matrices(params, J = J, M = M)
 
-    # Parse parameters needed for residuals
-    alpha_0 <- params[paste0("alpha", 2:J)]
-
-    A <- matrix(0, n_input_shares, n_input_shares)
-    for (j in 1:n_input_shares) {
-        for (k in j:n_input_shares) {
-            val <- params[paste0("A_", j, "_", k)]
-            A[j, k] <- val
-            A[k, j] <- val
-        }
-    }
-
-    beta_0 <- params[paste0("beta", 1:M)]
-
-    B <- matrix(0, n_output_shares, n_output_shares)
-    for (m in 1:n_output_shares) {
-        for (k in m:n_output_shares) {
-            val <- params[paste0("B_", m, "_", k)]
-            B[m, k] <- val
-            B[k, m] <- val
-        }
-    }
-
-    Gamma <- matrix(0, n_input_shares, n_output_shares)
-    for (j in 1:n_input_shares) {
-        for (m in 1:n_output_shares) {
-            Gamma[j, m] <- params[paste0("Gamma_", j, "_", m)]
-        }
-    }
+    alpha_0 <- profit_params$alpha
+    beta_0 <- profit_params$beta
+    A <- profit_params$A
+    B <- profit_params$B
+    Gamma <- profit_params$Gamma
 
     # Extract Data
-    S <- as.matrix(data[, paste0("S", 2:J), drop = FALSE])
-    R <- as.matrix(data[, paste0("R", 1:M), drop = FALSE])
-    ln_w <- as.matrix(data[, paste0("ln_w", 2:J, "_w1"), drop = FALSE])
-    ln_p <- as.matrix(data[, paste0("ln_p", 1:M, "_w1"), drop = FALSE])
+    S <- as.matrix(data_internal[, paste0("S", 2:J), drop = FALSE])
+    R <- as.matrix(data_internal[, paste0("R", 1:M), drop = FALSE])
+    ln_w <- as.matrix(data_internal[, paste0("ln_w", 2:J, "_w1"), drop = FALSE])
+    ln_p <- as.matrix(data_internal[, paste0("ln_p", 1:M, "_w1"), drop = FALSE])
 
     # Calculate residuals
-    eps_S <- matrix(0, nrow(data), n_input_shares)
+    eps_S <- matrix(0, nrow(data_internal), n_input_shares)
     for (j in 1:n_input_shares) {
         det_part <- alpha_0[j] + as.vector(A[j, , drop = FALSE] %*% t(ln_w)) + as.vector(Gamma[j, , drop = FALSE] %*% t(ln_p))
         eps_S[, j] <- -S[, j] - det_part
     }
 
-    eps_R <- matrix(0, nrow(data), n_output_shares)
+    eps_R <- matrix(0, nrow(data_internal), n_output_shares)
     for (m in 1:n_output_shares) {
         det_part <- beta_0[m] + as.vector(B[m, , drop = FALSE] %*% t(ln_p)) + as.vector(t(Gamma[, m, drop = FALSE]) %*% t(ln_w))
         eps_R[, m] <- R[, m] - det_part
@@ -83,7 +80,7 @@ predict.sfaKL <- function(object, newdata = NULL, n_cores = 1, ...) {
     Psi <- mats$Psi
     Delta <- mats$Delta
 
-    n <- nrow(data)
+    n <- nrow(data_internal)
 
     # Loop over observations
     calc_ineff <- function(i) {
@@ -122,15 +119,8 @@ predict.sfaKL <- function(object, newdata = NULL, n_cores = 1, ...) {
         return(mu_cond + Delta %*% (num / denom))
     }
 
-    if (n_cores > 1) {
-        eta_pred_list <- parallel::mclapply(1:n, calc_ineff, mc.cores = n_cores)
-        eta_pred <- do.call(rbind, lapply(eta_pred_list, t))
-    } else {
-        eta_pred <- matrix(0, n, n_ineff)
-        for (i in 1:n) {
-            eta_pred[i, ] <- t(calc_ineff(i))
-        }
-    }
+    eta_pred_list <- safe_parallel_lapply(1:n, calc_ineff, n_cores = n_cores)
+    eta_pred <- do.call(rbind, lapply(eta_pred_list, t))
 
     # eta = (-mu1, ..., -muJ, delta1, ..., deltaM)
     # Return data frame with named columns

@@ -6,6 +6,7 @@
 #' @param price_input_ratio Name of the log input price ratio column (default "ln_w2_w1") or vector
 #' @param price_output_ratios Names of the log output-to-input price ratio columns (default c("ln_p1_w1", "ln_p2_w1"))
 #' @param start_params Optional named vector of starting parameters
+#' @param optimizer Which optimizer to use ("optim" or "nlminb")
 #' @param method Optimization method (default "L-BFGS-B")
 #' @param control List of control parameters for optim
 #' @param n_cores Number of cores for parallel execution (default 1)
@@ -24,6 +25,7 @@ sfaKL_estimate <- function(data,
                            price_input_ratio = "ln_w2_w1",
                            price_output_ratios = c("ln_p1_w1", "ln_p2_w1"),
                            start_params = NULL,
+                           optimizer = c("optim", "nlminb"),
                            method = "L-BFGS-B",
                            control = list(maxit = 10000, reltol = 1e-8),
                            n_cores = 1,
@@ -34,6 +36,7 @@ sfaKL_estimate <- function(data,
                            lower = NULL,
                            upper = NULL,
                            parscale = NULL) {
+    optimizer <- match.arg(optimizer)
     # Infer Dimensions
     n_input_shares <- length(share_input)
     n_output_shares <- length(share_output)
@@ -217,21 +220,26 @@ sfaKL_estimate <- function(data,
         }
     }
 
-    # Incorporate optional parscale
+    # Incorporate optional scaling
     if (!is.null(parscale)) {
-        control$parscale <- parscale
-    }
-
-    # Switch to box method if bounds supplied and method not compatible
-    if ((!is.null(lower) || !is.null(upper)) && !(method %in% c("L-BFGS-B", "Brent"))) {
-        warning("Bounds supplied; switching method to 'L-BFGS-B' to respect bounds.")
-        method <- "L-BFGS-B"
+        if (optimizer == "optim") {
+            control$parscale <- parscale
+        } else if (optimizer == "nlminb") {
+            control$scale <- parscale
+        }
     }
 
     # Gradient function (finite differences)
     gr_fun <- NULL
-    if (use_gradient && method %in% c("BFGS", "L-BFGS-B")) {
+    if (use_gradient && optimizer == "optim" && method %in% c("BFGS", "L-BFGS-B")) {
         gr_fun <- function(par, ...) {
+            numDeriv::grad(
+                func = function(p) sfaKL_loglik(p, data_internal, J, M, n_cores),
+                x = par
+            )
+        }
+    } else if (use_gradient && optimizer == "nlminb") {
+        gr_fun <- function(par) {
             numDeriv::grad(
                 func = function(p) sfaKL_loglik(p, data_internal, J, M, n_cores),
                 x = par
@@ -241,7 +249,16 @@ sfaKL_estimate <- function(data,
 
     message("Starting optimization...")
     do_optim <- function(par_start) {
-        if (is.null(lower) && is.null(upper)) {
+        if (optimizer == "nlminb") {
+            nlminb(
+                start = par_start,
+                objective = function(p) sfaKL_loglik(p, data_internal, J, M, n_cores),
+                gradient = gr_fun,
+                lower = lower_bounds,
+                upper = upper_bounds,
+                control = control
+            )
+        } else if (is.null(lower) && is.null(upper)) {
             optim(
                 par = par_start,
                 fn = sfaKL_loglik,
@@ -297,14 +314,22 @@ sfaKL_estimate <- function(data,
 
     opt <- best_opt
 
-    if (opt$convergence != 0) {
-        warning("Optimization did not converge. Code: ", opt$convergence)
+    # Harmonize optimizer outputs
+    opt_par <- if (!is.null(opt$par)) opt$par else opt$parameters
+    opt_value <- if (!is.null(opt$value)) opt$value else opt$objective
+    opt_conv <- if (!is.null(opt$convergence)) opt$convergence else if (!is.null(opt$message)) 0 else 1
+    opt_counts <- if (!is.null(opt$counts)) opt$counts else if (!is.null(opt$evaluations)) opt$evaluations else NA
+    opt_message <- if (!is.null(opt$message)) opt$message else ""
+    opt_hessian <- if (!is.null(opt$hessian)) opt$hessian else NULL
+
+    if (opt_conv != 0) {
+        warning("Optimization did not converge. Code: ", opt_conv, " ", opt_message)
     } else if (verbose) {
         message("Optimization converged.")
     }
 
     # Transform Cholesky diagonals for readability (raw_par retains optimization scale)
-    est_params <- opt$par
+    est_params <- opt_par
     chol_names <- names(est_params)[grepl("^chol_", names(est_params))]
     for (nm in chol_names) {
         idx <- as.integer(tail(strsplit(nm, "_")[[1]], 2))
@@ -318,7 +343,7 @@ sfaKL_estimate <- function(data,
         Delta = NA_real_
     )
     if (verbose) {
-        mats_check <- try(get_matrices(opt$par, J, M), silent = TRUE)
+        mats_check <- try(get_matrices(opt_par, J, M), silent = TRUE)
         if (!inherits(mats_check, "try-error")) {
             cond_numbers$Theta <- kappa(mats_check$Theta)
             cond_numbers$Delta <- kappa(mats_check$Delta)
@@ -327,11 +352,11 @@ sfaKL_estimate <- function(data,
 
     result <- list(
         par = est_params,
-        raw_par = opt$par,
-        value = opt$value,
-        counts = opt$counts,
-        convergence = opt$convergence,
-        hessian = opt$hessian,
+        raw_par = opt_par,
+        value = opt_value,
+        counts = opt_counts,
+        convergence = opt_conv,
+        hessian = opt_hessian,
         data = data_internal,
         J = J,
         M = M,

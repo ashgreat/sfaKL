@@ -9,6 +9,7 @@ sfaKL_estimate(
   price_input_ratio = "ln_w2_w1",
   price_output_ratios = c("ln_p1_w1", "ln_p2_w1"),
   start_params = NULL,
+  optimizer = c("optim", "nlminb"),
   method = "L-BFGS-B",
   control = list(maxit = 10000, reltol = 1e-8),
   n_cores = 1,
@@ -33,6 +34,8 @@ sfaKL_estimate(
 \item{price_output_ratios}{Names of the log output-to-input price ratio columns.}
 
 \item{start_params}{Optional named vector of starting parameters; defaults to OLS-derived values.}
+
+\item{optimizer}{Which optimizer backend to use (\code{"optim"} or \code{"nlminb"}).}
 
 \item{method}{Optimization method passed to \code{optim}.}
 
