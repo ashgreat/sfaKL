@@ -54,9 +54,15 @@ print(result)
 *   `method`: Optimization method passed to `optim` (default `"Nelder-Mead"`).
 *   `control`: List of control parameters passed to `optim`.
 
-### Model Limitation
+### Model Dimensions
 
-**Note:** The current implementation of `sfaKL` is hardcoded for the **2-input, 2-output** case ($J=2, M=2$) as described in the application section of Kumbhakar and Lai (2021). It expects exactly one input share equation ($S_2$) and two revenue share equations ($R_1, R_2$). Future versions may generalize this to arbitrary dimensions.
+The `sfaKL` package now supports **arbitrary numbers of inputs ($J$) and outputs ($M$)**. 
+The dimensions are automatically inferred from the lengths of the `share_input` and `share_output` arguments.
+
+*   $J = \text{length(share\_input)} + 1$
+*   $M = \text{length(share\_output)}$
+
+Ensure that `price_input_ratio` has length $J-1$ and `price_output_ratios` has length $M$.
 
 # Compare estimated parameters with true parameters
 print("True Parameters:")

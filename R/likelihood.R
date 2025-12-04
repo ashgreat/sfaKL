@@ -2,124 +2,160 @@
 #'
 #' @param params Named vector of parameters
 #' @param data Data frame containing the variables
+#' @param J Number of inputs
+#' @param M Number of outputs
 #' @param n_cores Number of cores for parallel execution
 #' @return Negative log-likelihood
 #' @importFrom mvtnorm pmvnorm
 #' @importFrom stats dnorm
 #' @importFrom parallel mclapply
-sfaKL_loglik <- function(params, data, n_cores = 1) {
-    # Extract data
-    # Dependent variables (residuals from the share equations)
+sfaKL_loglik <- function(params, data, J = 2, M = 2, n_cores = 1) {
+    # Dimensions
+    n_input_shares <- J - 1
+    n_output_shares <- M
+    n_eq <- n_input_shares + n_output_shares
+    n_ineff <- J + M
 
-    # Parse parameters
-    alpha2 <- params["alpha2"]
-    alpha22 <- params["alpha22"]
+    # Extract Data
+    # Assuming data has standard names from sfaKL_estimate
+    S <- as.matrix(data[, paste0("S", 2:J), drop = FALSE])
+    R <- as.matrix(data[, paste0("R", 1:M), drop = FALSE])
+    ln_w <- as.matrix(data[, paste0("ln_w", 2:J, "_w1"), drop = FALSE])
+    ln_p <- as.matrix(data[, paste0("ln_p", 1:M, "_w1"), drop = FALSE])
 
-    beta1 <- params["beta1"]
-    beta2 <- params["beta2"]
-    beta11 <- params["beta11"]
-    beta22 <- params["beta22"]
-    beta12 <- params["beta12"]
+    # Parse Parameters
+    # Alpha
+    alpha_0 <- params[paste0("alpha", 2:J)]
 
-    gamma21 <- params["gamma21"]
-    gamma22 <- params["gamma22"]
+    # A Matrix (Symmetric)
+    A <- matrix(0, n_input_shares, n_input_shares)
+    for (j in 1:n_input_shares) {
+        for (k in j:n_input_shares) {
+            val <- params[paste0("A_", j, "_", k)]
+            A[j, k] <- val
+            A[k, j] <- val
+        }
+    }
 
-    # Standard deviations (exponentiated to ensure positivity)
-    # Limit extreme values to prevent numerical issues
-    sigma_mu1 <- exp(min(params["log_sigma_mu1"], 10))
-    sigma_mu2 <- exp(min(params["log_sigma_mu2"], 10))
-    sigma_delta1 <- exp(min(params["log_sigma_delta1"], 10))
-    sigma_delta2 <- exp(min(params["log_sigma_delta2"], 10))
+    # Beta
+    beta_0 <- params[paste0("beta", 1:M)]
 
-    sigma_v12 <- exp(min(params["log_sigma_v12"], 10))
-    sigma_v21 <- exp(min(params["log_sigma_v21"], 10))
-    sigma_v22 <- exp(min(params["log_sigma_v22"], 10))
+    # B Matrix (Symmetric)
+    B <- matrix(0, n_output_shares, n_output_shares)
+    for (m in 1:n_output_shares) {
+        for (k in m:n_output_shares) {
+            val <- params[paste0("B_", m, "_", k)]
+            B[m, k] <- val
+            B[k, m] <- val
+        }
+    }
 
-    # Construct Residuals (epsilon)
-    eps1 <- -data$S2 - (alpha2 + alpha22 * data$ln_w2_w1 + gamma21 * data$ln_p1_w1 + gamma22 * data$ln_p2_w1)
-    eps2_1 <- data$R1 - (beta1 + beta11 * data$ln_p1_w1 + beta12 * data$ln_p2_w1 + gamma21 * data$ln_w2_w1)
-    eps2_2 <- data$R2 - (beta2 + beta12 * data$ln_p1_w1 + beta22 * data$ln_p2_w1 + gamma22 * data$ln_w2_w1)
+    # Gamma Matrix
+    Gamma <- matrix(0, n_input_shares, n_output_shares)
+    for (j in 1:n_input_shares) {
+        for (m in 1:n_output_shares) {
+            Gamma[j, m] <- params[paste0("Gamma_", j, "_", m)]
+        }
+    }
 
-    epsilon <- cbind(eps1, eps2_1, eps2_2) # N x 3 matrix
+    # Variances
+    # Limit extreme values
+    sigma_mu <- exp(pmin(params[paste0("log_sigma_mu", 1:J)], 10))
+    sigma_delta <- exp(pmin(params[paste0("log_sigma_delta", 1:M)], 10))
 
-    # Matrix construction
-    A <- matrix(alpha22, 1, 1)
-    B <- matrix(c(beta11, beta12, beta12, beta22), 2, 2)
-    Gamma <- matrix(c(gamma21, gamma22), 1, 2)
+    sigma_v_S <- exp(pmin(params[paste0("log_sigma_v_S", 2:J)], 10))
+    sigma_v_R <- exp(pmin(params[paste0("log_sigma_v_R", 1:M)], 10))
 
-    l_J_1 <- matrix(1, 1, 1)
-    l_M <- matrix(1, 2, 1)
-    I_J_1 <- diag(1)
-    O_M_J_1 <- matrix(0, 2, 1)
+    # Construct Residuals
+    eps_S <- matrix(0, nrow(data), n_input_shares)
+    for (j in 1:n_input_shares) {
+        det_part <- alpha_0[j] + as.vector(A[j, , drop = FALSE] %*% t(ln_w)) + as.vector(Gamma[j, , drop = FALSE] %*% t(ln_p))
+        eps_S[, j] <- -S[, j] - det_part
+    }
 
-    part1 <- -A %*% cbind(-l_J_1, I_J_1)
-    part2 <- Gamma %*% cbind(l_M, O_M_J_1)
+    eps_R <- matrix(0, nrow(data), n_output_shares)
+    for (m in 1:n_output_shares) {
+        det_part <- beta_0[m] + as.vector(B[m, , drop = FALSE] %*% t(ln_p)) + as.vector(t(Gamma[, m, drop = FALSE]) %*% t(ln_w))
+        eps_R[, m] <- R[, m] - det_part
+    }
+
+    epsilon <- cbind(eps_S, eps_R)
+
+    # Matrix Construction for Likelihood
+    l_J_1 <- matrix(1, n_input_shares, 1)
+    l_M <- matrix(1, n_output_shares, 1)
+    I_J_1 <- diag(1, n_input_shares)
+    O_M_J_1 <- matrix(0, n_output_shares, n_input_shares)
+
+    # H1 = -A(-l, I) + Gamma(l, 0)
+    # -l is J-1 x 1, I is J-1 x J-1. Combined is J-1 x J.
+    neg_l_I <- cbind(-l_J_1, I_J_1)
+    l_O <- cbind(l_M, O_M_J_1)
+
+    part1 <- -A %*% neg_l_I
+    part2 <- Gamma %*% l_O
     H1 <- part1 + part2
 
-    part3 <- -t(Gamma) %*% cbind(-l_J_1, I_J_1)
-    part4 <- B %*% cbind(l_M, O_M_J_1)
+    # H2 = -Gamma'(-l, I) + B(l, 0)
+    part3 <- -t(Gamma) %*% neg_l_I
+    part4 <- B %*% l_O
     H2 <- part3 + part4
 
+    # H = (-H1, -Gamma; -H2, -B)
     top_row <- cbind(-H1, -Gamma)
     bottom_rows <- cbind(-H2, -B)
     H <- rbind(top_row, bottom_rows)
 
-    Sigma <- diag(c(sigma_mu1^2, sigma_mu2^2, sigma_delta1^2, sigma_delta2^2))
-    Omega <- diag(c(sigma_v12^2, sigma_v21^2, sigma_v22^2))
+    # Sigma = diag(sigma_mu^2, sigma_delta^2)
+    Sigma <- diag(c(sigma_mu^2, sigma_delta^2))
 
-    # Robust matrix inversion
+    # Omega = diag(sigma_v_S^2, sigma_v_R^2)
+    Omega <- diag(c(sigma_v_S^2, sigma_v_R^2))
+
+    # Robust Matrix Inversion
     tryCatch(
         {
             Theta <- Omega + H %*% Sigma %*% t(H)
-            Theta <- (Theta + t(Theta)) / 2 # Force symmetry
+            Theta <- (Theta + t(Theta)) / 2
             Theta_inv <- solve(Theta)
 
+            # Delta
             Omega_inv <- solve(Omega)
             Sigma_inv <- solve(Sigma)
             Delta_inv <- t(H) %*% Omega_inv %*% H + Sigma_inv
             Delta <- solve(Delta_inv)
-            Delta <- (Delta + t(Delta)) / 2 # Force symmetry
+            Delta <- (Delta + t(Delta)) / 2
 
-            # W = Sigma H' Theta^-1
+            # W
             W <- Sigma %*% t(H) %*% Theta_inv
 
             # Term 1: PDF of N(0, Theta)
-            term1 <- mvtnorm::dmvnorm(epsilon, mean = rep(0, 3), sigma = Theta, log = TRUE)
+            term1 <- mvtnorm::dmvnorm(epsilon, mean = rep(0, n_eq), sigma = Theta, log = TRUE)
 
             # Term 2: CDF term
-            args <- epsilon %*% t(W) # N x 4 matrix
+            args <- epsilon %*% t(W) # N x (J+M)
 
             if (any(is.na(args))) {
                 return(1e10)
             }
 
-            # Loop over observations (can be slow in R, but unavoidable with pmvnorm)
-            # Use parallel::mclapply if n_cores > 1
-
             calc_term2 <- function(i) {
-                prob <- suppressWarnings(mvtnorm::pmvnorm(lower = lower, upper = args[i, ], mean = mean_delta, sigma = Delta))
+                prob <- suppressWarnings(mvtnorm::pmvnorm(lower = rep(-Inf, n_ineff), upper = args[i, ], mean = rep(0, n_ineff), sigma = Delta))
                 val <- as.numeric(prob)
                 if (val <= 0 || is.na(val)) val <- 1e-100
                 return(log(val))
             }
 
-            lower <- rep(-Inf, 4)
-            mean_delta <- rep(0, 4)
-
             if (n_cores > 1) {
-                # Use mclapply for parallel execution (works best on macOS/Linux)
                 term2_list <- parallel::mclapply(1:nrow(data), calc_term2, mc.cores = n_cores)
                 term2 <- unlist(term2_list)
             } else {
-                # Serial execution
                 term2 <- numeric(nrow(data))
-                for (i in 1:nrow(data)) {
-                    term2[i] <- calc_term2(i)
-                }
+                for (i in 1:nrow(data)) term2[i] <- calc_term2(i)
             }
 
             # Term 3: Denominator
-            term3 <- log(0.0625)
+            term3 <- n_ineff * log(0.5)
 
             ll_i <- term1 + term2 - term3
 

@@ -1,95 +1,146 @@
 #' Simulate data for sfaKL model
 #'
 #' @param n Number of observations
+#' @param J Number of inputs (default 2)
+#' @param M Number of outputs (default 2)
 #' @param seed Random seed
 #' @return A list containing the simulated data and true parameters
 #' @export
-sfaKL_simulate <- function(n = 1000, seed = 123) {
+sfaKL_simulate <- function(n = 1000, J = 2, M = 2, seed = 123) {
     set.seed(seed)
 
-    # 1. Exogenous prices (normalized by w1)
-    # ln(w2/w1), ln(p1/w1), ln(p2/w1)
-    ln_w2_w1 <- rnorm(n, 0, 0.5)
-    ln_p1_w1 <- rnorm(n, 0, 0.5)
-    ln_p2_w1 <- rnorm(n, 0, 0.5)
+    # Dimensions
+    n_input_shares <- J - 1
+    n_output_shares <- M
+    n_eq <- n_input_shares + n_output_shares
 
-    # 2. True Parameters
-    # Alpha (Input share params)
-    alpha2 <- -0.3
-    alpha22 <- 0.1
+    # 1. Exogenous prices
+    # ln(w_j/w_1) for j=2..J
+    ln_w <- matrix(rnorm(n * n_input_shares, 0, 0.5), nrow = n)
+    colnames(ln_w) <- paste0("ln_w", 2:J, "_w1")
 
-    # Beta (Revenue share params)
-    beta1 <- 0.4
-    beta2 <- 0.3
-    beta11 <- 0.1
-    beta22 <- 0.1
-    beta12 <- -0.05 # Symmetry: beta12 = beta21
-    beta21 <- beta12
+    # ln(p_m/w_1) for m=1..M
+    ln_p <- matrix(rnorm(n * n_output_shares, 0, 0.5), nrow = n)
+    colnames(ln_p) <- paste0("ln_p", 1:M, "_w1")
 
-    # Gamma (Cross params)
-    gamma21 <- 0.05
-    gamma22 <- 0.04
+    # 2. Parameters
+    # Alpha (Input share params) - Symmetric (J-1)x(J-1)
+    alpha_0 <- runif(n_input_shares, -0.4, -0.2)
+    names(alpha_0) <- paste0("alpha", 2:J)
 
-    # Variance parameters for inefficiencies (Half-Normal)
-    sigma_mu1 <- 0.1
-    sigma_mu2 <- 0.1
-    sigma_delta1 <- 0.1
-    sigma_delta2 <- 0.1
+    A <- matrix(runif(n_input_shares^2, 0.05, 0.15), n_input_shares, n_input_shares)
+    A <- (A + t(A)) / 2 # Symmetry
 
-    # Variance parameters for noise (Normal)
-    sigma_v12 <- 0.05 # Error in S2
-    sigma_v21 <- 0.05 # Error in R1
-    sigma_v22 <- 0.05 # Error in R2
+    # Beta (Revenue share params) - Symmetric MxM
+    beta_0 <- runif(n_output_shares, 0.3, 0.5)
+    names(beta_0) <- paste0("beta", 1:M)
 
-    # 3. Simulate Inefficiencies (Half-Normal)
-    # mu <= 0, so we simulate |N| and take negative
-    mu1 <- -abs(rnorm(n, 0, sigma_mu1))
-    mu2 <- -abs(rnorm(n, 0, sigma_mu2))
-    delta1 <- abs(rnorm(n, 0, sigma_delta1))
-    delta2 <- abs(rnorm(n, 0, sigma_delta2))
+    B <- matrix(runif(n_output_shares^2, 0.05, 0.15), n_output_shares, n_output_shares)
+    B <- (B + t(B)) / 2 # Symmetry
 
-    # 4. Calculate Composite Inefficiency Terms (u and omega)
-    # u2 = -alpha22*(mu2 - mu1) - gamma21*(delta1 - mu1) - gamma22*(delta2 - mu1)
-    u2 <- -alpha22 * (mu2 - mu1) - gamma21 * (delta1 - mu1) - gamma22 * (delta2 - mu1)
+    # Gamma (Cross params) - (J-1)xM
+    Gamma <- matrix(runif(n_input_shares * n_output_shares, 0.03, 0.07), n_input_shares, n_output_shares)
 
-    # omega1 = -beta11*(delta1 - mu1) - beta12*(delta2 - mu1) - gamma21*(mu2 - mu1)
-    omega1 <- -beta11 * (delta1 - mu1) - beta12 * (delta2 - mu1) - gamma21 * (mu2 - mu1)
+    # Variances
+    sigma_mu <- rep(0.1, J)
+    names(sigma_mu) <- paste0("mu", 1:J)
 
-    # omega2 = -beta21*(delta1 - mu1) - beta22*(delta2 - mu1) - gamma22*(mu2 - mu1)
-    omega2 <- -beta21 * (delta1 - mu1) - beta22 * (delta2 - mu1) - gamma22 * (mu2 - mu1)
+    sigma_delta <- rep(0.1, M)
+    names(sigma_delta) <- paste0("delta", 1:M)
 
-    # 5. Simulate Noise
-    v12 <- rnorm(n, 0, sigma_v12)
-    v21 <- rnorm(n, 0, sigma_v21)
-    v22 <- rnorm(n, 0, sigma_v22)
+    sigma_v <- rep(0.05, n_eq)
+    names(sigma_v) <- c(paste0("v_S", 2:J), paste0("v_R", 1:M))
 
-    # 6. Calculate Shares
-    # -S2 = alpha2 + alpha22*ln_w2_w1 + gamma21*ln_p1_w1 + gamma22*ln_p2_w1 + u2 + v12
-    # S2 = -(...)
-    neg_S2 <- alpha2 + alpha22 * ln_w2_w1 + gamma21 * ln_p1_w1 + gamma22 * ln_p2_w1 + u2 + v12
-    S2 <- -neg_S2
+    # 3. Inefficiencies
+    mu <- matrix(0, n, J)
+    for (j in 1:J) mu[, j] <- -abs(rnorm(n, 0, sigma_mu[j]))
 
-    # R1 = beta1 + beta11*ln_p1_w1 + beta12*ln_p2_w1 + gamma21*ln_w2_w1 + omega1 + v21
-    R1 <- beta1 + beta11 * ln_p1_w1 + beta12 * ln_p2_w1 + gamma21 * ln_w2_w1 + omega1 + v21
+    delta <- matrix(0, n, M)
+    for (m in 1:M) delta[, m] <- abs(rnorm(n, 0, sigma_delta[m]))
 
-    # R2 = beta2 + beta21*ln_p1_w1 + beta22*ln_p2_w1 + gamma22*ln_w2_w1 + omega2 + v22
-    R2 <- beta2 + beta21 * ln_p1_w1 + beta22 * ln_p2_w1 + gamma22 * ln_w2_w1 + omega2 + v22
+    # 4. Composite Errors
+    # u (length J-1)
+    u <- matrix(0, n, n_input_shares)
+    for (j in 1:n_input_shares) {
+        # u_j corresponds to input j+1
+        # Formula: - sum_k=2^J A_jk (mu_k - mu_1) - sum_m=1^M G_jm (delta_m - mu_1)
 
-    data <- data.frame(
-        S2 = S2,
-        R1 = R1,
-        R2 = R2,
-        ln_w2_w1 = ln_w2_w1,
-        ln_p1_w1 = ln_p1_w1,
-        ln_p2_w1 = ln_p2_w1
-    )
+        term1 <- 0
+        for (k in 1:n_input_shares) {
+            term1 <- term1 + A[j, k] * (mu[, k + 1] - mu[, 1])
+        }
+
+        term2 <- 0
+        for (m in 1:M) {
+            term2 <- term2 + Gamma[j, m] * (delta[, m] - mu[, 1])
+        }
+        u[, j] <- -term1 - term2
+    }
+
+    # omega (length M)
+    omega <- matrix(0, n, M)
+    for (m in 1:M) {
+        # Formula: - sum_k=1^M B_mk (delta_k - mu_1) - sum_j=2^J G_jm (mu_j - mu_1)
+        # Note G_jm is Gamma[j-1, m]
+
+        term1 <- 0
+        for (k in 1:M) {
+            term1 <- term1 + B[m, k] * (delta[, k] - mu[, 1])
+        }
+
+        term2 <- 0
+        for (j in 1:n_input_shares) {
+            term2 <- term2 + Gamma[j, m] * (mu[, j + 1] - mu[, 1])
+        }
+        omega[, m] <- -term1 - term2
+    }
+
+    # 5. Noise
+    v <- matrix(0, n, n_eq)
+    for (i in 1:n_eq) v[, i] <- rnorm(n, 0, sigma_v[i])
+
+    # 6. Shares
+    # S (length J-1)
+    S <- matrix(0, n, n_input_shares)
+    colnames(S) <- paste0("S", 2:J)
+
+    for (j in 1:n_input_shares) {
+        # S_j = - (alpha_j + sum A_jk ln_w + sum G_jm ln_p + u_j + v_j)
+
+        det_part <- alpha_0[j]
+        det_part <- det_part + as.vector(A[j, , drop = FALSE] %*% t(ln_w))
+        det_part <- det_part + as.vector(Gamma[j, , drop = FALSE] %*% t(ln_p))
+
+        S[, j] <- -(det_part + u[, j] + v[, j])
+    }
+
+    # R (length M)
+    R <- matrix(0, n, M)
+    colnames(R) <- paste0("R", 1:M)
+
+    for (m in 1:M) {
+        # R_m = beta_m + sum B_mk ln_p + sum G_jm ln_w + omega_m + v_{M+m}
+
+        det_part <- beta_0[m]
+        det_part <- det_part + as.vector(B[m, , drop = FALSE] %*% t(ln_p))
+        det_part <- det_part + as.vector(t(Gamma[, m, drop = FALSE]) %*% t(ln_w))
+
+        R[, m] <- det_part + omega[, m] + v[, n_input_shares + m]
+    }
+
+    data <- cbind(as.data.frame(S), as.data.frame(R), as.data.frame(ln_w), as.data.frame(ln_p))
 
     true_params <- list(
-        alpha = c(alpha2 = alpha2, alpha22 = alpha22),
-        beta = c(beta1 = beta1, beta2 = beta2, beta11 = beta11, beta22 = beta22, beta12 = beta12),
-        gamma = c(gamma21 = gamma21, gamma22 = gamma22),
-        sigma_ineff = c(mu1 = sigma_mu1, mu2 = sigma_mu2, delta1 = sigma_delta1, delta2 = sigma_delta2),
-        sigma_noise = c(v12 = sigma_v12, v21 = sigma_v21, v22 = sigma_v22)
+        J = J,
+        M = M,
+        alpha_0 = alpha_0,
+        A = A,
+        beta_0 = beta_0,
+        B = B,
+        Gamma = Gamma,
+        sigma_mu = sigma_mu,
+        sigma_delta = sigma_delta,
+        sigma_v = sigma_v
     )
 
     return(list(data = data, true_params = true_params))
