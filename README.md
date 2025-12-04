@@ -60,8 +60,8 @@ print(result)
 The `sfaKL` package now supports **arbitrary numbers of inputs ($J$) and outputs ($M$)**. 
 The dimensions are automatically inferred from the lengths of the `share_input` and `share_output` arguments.
 
--   $J = \text{length(share\_input)} + 1$
--   $M = \text{length(share\_output)}$
+-   $J = \text{length(share\\_input)} + 1$
+-   $M = \text{length(share\\_output)}$
 
 Ensure that `price_input_ratio` has length $J-1$ and `price_output_ratios` has length $M$.
 
