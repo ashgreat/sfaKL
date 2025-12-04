@@ -148,13 +148,14 @@ sfaKL_estimate <- function(data,
         }
 
         # Inefficiency covariance (diagonal start, log-scale on diag)
-        for (j in 1:J) start_params[paste0("chol_Sigma_mu_", j, "_", j)] <- log(0.1)
+        # Use larger starting values to avoid collapsing toward zero
+        for (j in 1:J) start_params[paste0("chol_Sigma_mu_", j, "_", j)] <- log(0.15)
         if (J > 1) {
             for (j in 2:J) {
                 for (k in 1:(j - 1)) start_params[paste0("chol_Sigma_mu_", j, "_", k)] <- 0
             }
         }
-        for (m in 1:M) start_params[paste0("chol_Sigma_delta_", m, "_", m)] <- log(0.1)
+        for (m in 1:M) start_params[paste0("chol_Sigma_delta_", m, "_", m)] <- log(0.15)
         if (M > 1) {
             for (m in 2:M) {
                 for (k in 1:(m - 1)) start_params[paste0("chol_Sigma_delta_", m, "_", k)] <- 0
@@ -214,7 +215,8 @@ sfaKL_estimate <- function(data,
             parts <- strsplit(names(start_params)[idx], "_")[[1]]
             last_two <- tail(parts, 2)
             if (length(last_two) == 2 && last_two[1] == last_two[2]) {
-                lower_bounds[idx] <- ifelse(is.infinite(lower_bounds[idx]), log(0.01), lower_bounds[idx])
+                # Raise minimum to prevent variance collapse (SD >= 0.05)
+                lower_bounds[idx] <- ifelse(is.infinite(lower_bounds[idx]), log(0.05), lower_bounds[idx])
                 upper_bounds[idx] <- ifelse(is.infinite(upper_bounds[idx]), log(5), upper_bounds[idx])
             }
         }
