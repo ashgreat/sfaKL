@@ -15,7 +15,8 @@ Imports:
     mvtnorm,
     ggplot2,
     stats,
-    parallel
+    parallel,
+    numDeriv
 Suggests: 
     testthat,
     knitr,
